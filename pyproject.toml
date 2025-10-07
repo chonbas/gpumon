@@ -1,0 +1,61 @@
+[project]
+author = "Alexei Bastidas"
+name = "gpumon"
+version = "0.1.0"
+description = "Simple Textual application to provide live monitoring of an nVidia GPU."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pytz>=2025.2",
+    "textual>=6.2.1",
+    "textual-plotext>=1.0.1",
+]
+
+[project.scripts]
+gpumon = "gpumon:main"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+exclude = [
+    "ruff",
+    ".git",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".env",
+    ".venv",
+    "__pycache__",
+    ".cache",
+    ".local",
+    ".tmp",
+    "test_*.py",
+    ".neptune"
+]
+select = [
+    "E",   # pycodestyle (error)
+    "F",   # pyflakes
+    "B",   # bugbear
+    "B9",
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+    "I",   # isort
+    "PIE", # flake8-pie
+    "PGH", # pygrep-hooks
+    "PYI", # flake8-pyi
+    "RUF",
+]
+[tool.hatch.build]
+sources = ["src"]
+
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.13.3",
+]
+
