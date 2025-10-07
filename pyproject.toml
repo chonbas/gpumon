@@ -6,6 +6,7 @@ description = "Simple Textual application to provide live monitoring of an nVidi
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "psutil>=7.1.0",
     "pytz>=2025.2",
     "textual>=6.2.1",
     "textual-plotext>=1.0.1",

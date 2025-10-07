@@ -1,0 +1,7 @@
+import os
+
+DEFAULT_HISTORY = 1000
+LOCAL_TIMEZONE: str = os.getenv("LOCAL_TIMEZONE", default="US/Arizona")
+
+DEFAULT_DMON_POLL = 1
+DEFAULT_PROC_POLL = 3
