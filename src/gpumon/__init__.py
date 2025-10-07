@@ -108,6 +108,7 @@ class GPUMonitorApp(App):
         ("q", "quit", "Quit"),
         ("l", "toggle_log", "Toggle Log"),
     ]
+    TITLE = "GPUMonitor"
     CSS = """
     #info-panel {
         height: auto;
