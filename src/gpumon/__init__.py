@@ -3,7 +3,7 @@ import asyncio
 import os
 import re
 from collections import deque
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import ClassVar
@@ -27,6 +27,8 @@ DMON_BASE_CMD: list[str] = ["nvidia-smi", "dmon", "-d", str(DEFAULT_DMON_POLL), 
 INFO_BASE_CMD: list[str] = ["nvidia-smi", "-q", "-i"]
 
 LOCAL_TIMEZONE = os.getenv("LOCAL_TIMEZONE", "US/Arizona")
+
+ValueFormatter = Callable[[float], str]
 
 
 @asynccontextmanager
@@ -58,20 +60,32 @@ class GPUPlot(PlotextPlot):
     dmon_interval: int
     proc_interval: int
     tz: pytz.BaseTzInfo
+    upper: float | None
+    value_formatter: ValueFormatter | None
 
     def __init__(
         self,
+        name: str | None = None,
+        id: str | None = None,
         tz: str = LOCAL_TIMEZONE,
         history_size: int = DEFAULT_HISTORY,
         dmon_interval: int = DEFAULT_DMON_POLL,
         proc_interval: int = DEFAULT_PROC_POLL,
+        value_formatter: ValueFormatter | None = None,
+        upper: float | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(name=name, id=id)
         self.data = deque(maxlen=DEFAULT_HISTORY)
         self.history_size = history_size
         self.dmon_interval = dmon_interval
         self.proc_interval = proc_interval
+        self.upper = upper
+        self.value_formatter = value_formatter
         self.tz = pytz.timezone(tz)
+
+    def set_formatter(self, formatter: ValueFormatter) -> None:
+        """Sets a custom value formatter for the plot labels."""
+        self.value_formatter = formatter
 
     def update_data(self, value: float, /) -> None:
         """Appends the new data point with the current timestamp."""
@@ -85,12 +99,21 @@ class GPUPlot(PlotextPlot):
         self.plt.theme(theme="dark")
         if self.data:
             x_times, y_values = zip(*self.data, strict=False)
-            self.plt.plot(y_values, marker=self.marker, color="cyan")
+            last_val = y_values[-1]
+            self.plt.plot(
+                y_values,
+                marker=self.marker,
+                color="cyan",
+                label=self.value_formatter(last_val)
+                if self.value_formatter
+                else f"{last_val:.2f}",
+            )
             self.plt.xticks(
                 list(range(len(x_times))), labels=[f"{t:%H:%M:%S}" for t in x_times]
             )
-            if self.border_title:
-                self.plt.ylim(lower=0, upper=100 if "%" in self.border_title else None)
+
+            self.plt.ylim(lower=0, upper=self.upper)
+
         else:
             width, height = self.size.width or 60, self.size.height or 15
             self.plt.text(
@@ -120,14 +143,14 @@ class GPUMonitorApp(App):
     #plots-grid {
         height: 1fr;
     }
-    #raw_log {
+    #raw-log {
         height: 7;
     }
     Grid {
         grid-size: 2 2;
         grid-gutter: 1;
     }
-    GPUPlot, DataTable, #raw_log {
+    GPUPlot, DataTable, #raw-log {
         border: round $primary;
     }
     DataTable {
@@ -149,11 +172,11 @@ class GPUMonitorApp(App):
         super().__init__()
         self.gpu_id = gpu_id
         self.info_panel = Static(content="Querying GPU Info...", id="info-panel")
-        self.util_plot = GPUPlot()
-        self.mem_plot = GPUPlot()
-        self.power_plot = GPUPlot()
-        self.proc_table = DataTable()
-        self.raw_log = RichLog(max_lines=100, id="raw_log", highlight=True, markup=True)
+        self.mem_plot = GPUPlot(id="mem-plot")
+        self.power_plot = GPUPlot(id="power-plot")
+        self.util_plot = GPUPlot(id="util-plot")
+        self.proc_table = DataTable(id="proc-table")
+        self.raw_log = RichLog(max_lines=100, id="raw-log", highlight=True, markup=True)
 
     def compose(self) -> ComposeResult:
         self.util_plot.border_title = f"GPU-{self.gpu_id} Utilization (%)"
@@ -257,9 +280,12 @@ class GPUMonitorApp(App):
                 cuda: str = cuda_match.group(1).strip()
             if mem_match:
                 mem: str = mem_match.group(1).strip()
+                mem_val, unit = mem.split()
+                mem_fac = float(mem_val.strip()) / 100.0
+                self.mem_plot.set_formatter(lambda v: f"{v * mem_fac: .1f} {unit}")
             info_text: str = (
-                f"[green][b]GPU:[/b] {name} | [b]Driver:[/b] {driver} | "
-                f"[b]CUDA:[/b] {cuda} | [b]Memory:[/b] {mem}[/]"
+                f"[b]GPU:[/b] {name} | [b]Driver:[/b] {driver} | "
+                f"[b]CUDA:[/b] {cuda} | [b]Memory:[/b] {mem}"
             )
             self.info_panel.update(content=info_text)
 
