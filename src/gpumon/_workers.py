@@ -213,15 +213,15 @@ def _get_gpu_info(output: str, mem_plot: DataPlot, power_plot: DataPlot) -> str:
     if cuda_match:
         cuda: str = cuda_match.group(1).strip()
     if mem_match:
-        total_mem: str = mem_match.group(1).strip()
+        mem: str = mem_match.group(1).strip()
         if not mem_plot.formatter_is_set:
-            mem_val, unit = total_mem.split()
-            mem_val = int(mem_val.strip())
+            mem_val, unit = mem.split()
+            tot_mem: float = float(mem_val.strip())
             if unit == "MiB":
-                mem_val = mem_val * 1e6
+                tot_mem = tot_mem * 1e6
             elif unit == "GiB":
-                mem_val = mem_val * 1e9
-            mem_plot.set_value_formatter(memory_formatter(total_bytes=mem_val))
+                tot_mem = tot_mem * 1e9
+            mem_plot.set_value_formatter(memory_formatter(total_bytes=tot_mem))
     if max_watt_match:
         watt_str: str = max_watt_match.group(1).strip()
         watt_val, _ = watt_str.split()
