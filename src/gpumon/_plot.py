@@ -17,7 +17,7 @@ def memory_formatter(total_bytes: float, normed: bool = False) -> ValueFormatter
         normed_percent: float = percent if normed else percent / 100.0
         unnormed_percent: float = percent if not normed else percent * 100.0
         tot_bytes: float = total_bytes * normed_percent
-        val: str = f"{unnormed_percent: .1f}% -"
+        val: str = f"{unnormed_percent: .1f}% /"
         if tot_bytes >= 1e9:
             val += f"{tot_bytes / 1e9: .2f} GiB"
         elif tot_bytes >= 1e6:
@@ -74,6 +74,7 @@ class DataPlot(PlotextPlot):
         self.y_upper_lim = y_upper_lim
         self.value_formatter = value_formatter
         self.tz = pytz.timezone(zone=tz)
+        self.border_title = name if name else "Data Plot"
 
     @property
     def formatter_is_set(self) -> bool:

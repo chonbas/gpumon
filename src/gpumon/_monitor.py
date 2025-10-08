@@ -3,7 +3,7 @@ from typing import ClassVar
 
 from textual.app import App, ComposeResult
 from textual.binding import BindingType
-from textual.containers import Grid, Vertical
+from textual.containers import Grid, Horizontal, Vertical
 from textual.widgets import DataTable, Footer, Header, RichLog, Static
 
 from ._defaults import DEFAULT_PROC_POLL
@@ -25,6 +25,7 @@ class SystemMonitor(App):
     BINDINGS: ClassVar[list[BindingType]] = [
         ("q", "quit", "Quit"),
         ("l", "toggle_log", "Toggle Log"),
+        ("y", "toggle_sys", "Toggle System Stats"),
     ]
     TITLE = "SystemMonitor"
     CSS = """
@@ -40,9 +41,13 @@ class SystemMonitor(App):
     #raw-log {
         height: 7;
     }
-    Grid {
-        grid-size: 2 3;
+    #gpu-grid {
+        grid-size: 2 2;
         grid-gutter: 1;
+        height: 70%;
+    }
+    #bottom-row {
+        height: 20%;
     }
     DataPlot, #proc-table, #raw-log {
         border: round $primary;
@@ -68,48 +73,57 @@ class SystemMonitor(App):
         self.gpu_id = gpu_id
         self.info_panel = Static(content="Querying system info...", id="info-panel")
         self.cpu_usage = DataPlot(
+            name="CPU Usage (%)",
             id="cpu-plot",
             y_upper_lim=100,
             value_formatter=percent_formatter(),
         )
         self.gpu_memory = DataPlot(
+            name=f"GPU-{self.gpu_id} Memory (%)",
             id="gpu-mem-plot",
             y_upper_lim=100,
         )
         self.gpu_power = DataPlot(
+            name=f"GPU-{self.gpu_id} Power (W)",
             id="gpu-power-plot",
             value_formatter=unit_formatter(unit="W"),
         )
+        self.gpu_temperature = DataPlot(
+            name=f"GPU-{self.gpu_id} Temperature (°C)",
+            id="gpu-temp-plot",
+            value_formatter=unit_formatter(unit="°C"),
+        )
         self.gpu_utilization = DataPlot(
+            name=f"GPU-{self.gpu_id} Utilization (%)",
             id="gpu-util-plot",
             y_upper_lim=100,
             value_formatter=percent_formatter(),
         )
         self.process_table = DataTable(id="proc-table")
+        self.process_table.border_title = "Processes"
         self.sys_memory = DataPlot(
             id="sys-mem-plot",
             y_upper_lim=100,
+            name="System Memory (%)",
         )
         self.raw_log = RichLog(max_lines=100, id="raw-log", highlight=True, markup=True)
+        self.raw_log.border_title = f"GPU-{self.gpu_id} Raw dmon Output (L to Toggle)"
 
     def compose(self) -> ComposeResult:
-        self.cpu_usage.border_title = "CPU Usage (%)"
-        self.gpu_memory.border_title = f"GPU-{self.gpu_id} Memory Util (%)"
-        self.gpu_power.border_title = f"GPU-{self.gpu_id} Power (W)"
-        self.gpu_utilization.border_title = f"GPU-{self.gpu_id} Utilization (%)"
-        self.process_table.border_title = "Processes"
-        self.raw_log.border_title = f"GPU-{self.gpu_id} Raw dmon Output (L to Toggle)"
-        self.sys_memory.border_title = "System Memory Util (%)"
         yield Header()
         yield self.info_panel
-        with Vertical(id="plot-container"), Grid(id="plots-grid"):
-            yield self.cpu_usage
-            yield self.sys_memory
-            yield self.gpu_utilization
-            yield self.gpu_memory
-            yield self.gpu_power
+        with Vertical(id="plot-container"):
+            with Grid(id="gpu-grid"):
+                yield self.gpu_utilization
+                yield self.gpu_memory
+                yield self.gpu_power
+                yield self.gpu_temperature
+            with Horizontal(id="sys-row"):
+                yield self.cpu_usage
+                yield self.sys_memory
+        with Horizontal(id="bottom-row"):
+            yield self.raw_log
             yield self.process_table
-        yield self.raw_log
         yield Footer()
 
     def on_mount(self) -> None:
@@ -143,6 +157,7 @@ class SystemMonitor(App):
                 self.raw_log,
                 self.gpu_memory,
                 self.gpu_power,
+                self.gpu_temperature,
                 self.gpu_utilization,
             ),
             exclusive=True,
@@ -155,3 +170,7 @@ class SystemMonitor(App):
 
     def action_toggle_log(self) -> None:
         self.raw_log.display = not self.raw_log.display
+
+    def action_toggle_sys(self) -> None:
+        sys_row = self.query_one("#sys-row")
+        sys_row.display = not sys_row.display

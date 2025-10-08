@@ -27,9 +27,17 @@ class SysMonitorWorkerError(Exception):
 
 @asynccontextmanager
 async def subprocess_lifespan(
-    command: list[str], /, log: RichLog, name: str = "Subprocess"
+    command: list[str],
+    /,
+    log: RichLog,
+    name: str = "Subprocess",
 ) -> AsyncGenerator[asyncio.subprocess.Process, None]:
-    """A context manager to ensure a subprocess is always terminated."""
+    """A context manager to ensure a subprocess is always terminated.
+    Args:
+        command: The command to execute as a list of strings
+        log: RichLog widget for logging errors
+        name: Name of the subprocess for logging
+    """
     process: asyncio.subprocess.Process = await asyncio.create_subprocess_exec(
         *command,
         stdout=asyncio.subprocess.PIPE,
@@ -46,19 +54,62 @@ async def subprocess_lifespan(
             await process.wait()
 
 
-async def poll_cpu_percent(log: RichLog, cpu_plot: DataPlot) -> None:
-    """Polls `psutil` to update CPU usage in real-time."""
+async def subprocess_communicate(
+    command: list[str],
+    /,
+    log: RichLog,
+    name: str = "Subprocess",
+    timeout: float = 5.0,
+) -> str | None:
+    async with subprocess_lifespan(command, log=log, name=name) as proc:
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        except asyncio.TimeoutError:
+            log.write("[orange]Process query timed out[/orange]")
+            return
+    if proc.returncode != 0:
+        log.write(
+            f"[red]{name} failed:[/] {stderr.decode(encoding='utf-8', errors='ignore')}"
+        )
+        return
+    return stdout.decode(encoding="utf-8").strip()
+
+
+async def poll_cpu_percent(
+    log: RichLog, cpu_plot: DataPlot, max_retries: int = 3
+) -> None:
+    """Polls `psutil` to update CPU usage in real-time.
+    This worker runs continuously and updates the CPU plot with current usage.
+    Errors are logged but don't stop the polling loop.
+    """
+    retries = 0
     while True:
         try:
             cpu_percent: float = psutil.cpu_percent(interval=None)
             cpu_plot.update_data(cpu_percent)
         except Exception as e:
+            retries += 1
+            if retries >= max_retries:
+                log.write(
+                    content="[bold red]CPU polling failed too many times, "
+                    "stopping.[/bold red]"
+                )
+                raise SysMonitorWorkerError("CPU polling failed too many times") from e
             log.write(content=f"[red]CPU Polling error:[/red] {e}")
         await asyncio.sleep(delay=DEFAULT_DMON_POLL)
 
 
-async def poll_memory_percent(log: RichLog, mem_plot: DataPlot) -> None:
-    """Polls `psutil` to update Memory usage in real-time."""
+async def poll_memory_percent(
+    log: RichLog, mem_plot: DataPlot, max_retries: int = 3
+) -> None:
+    """Polls `psutil` to update Memory usage in real-time.
+
+    This worker runs continuously and updates the memory plot with current usage.
+    The formatter is set on the first successful poll based on total memory.
+    Errors are logged but don't stop the polling loop.
+    """
+    retries = 0
+
     while True:
         try:
             mem = psutil.virtual_memory()
@@ -66,6 +117,13 @@ async def poll_memory_percent(log: RichLog, mem_plot: DataPlot) -> None:
                 mem_plot.set_value_formatter(memory_formatter(total_bytes=mem.total))
             mem_plot.update_data(mem.percent)
         except Exception as e:
+            retries += 1
+            if retries >= max_retries:
+                log.write(
+                    content="[bold red]Memory polling failed too many times, "
+                    "stopping.[/bold red]"
+                )
+                raise
             log.write(content=f"[red]Memory Polling error:[/red] {e}")
         await asyncio.sleep(delay=DEFAULT_DMON_POLL)
 
@@ -75,9 +133,22 @@ async def poll_dmon_stats(
     log: RichLog,
     mem_plot: DataPlot,
     power_plot: DataPlot,
+    temp_plot: DataPlot,
     util_plot: DataPlot,
 ) -> None:
-    """Polls `nvidia-smi dmon` to update GPU metrics in real-time."""
+    """Polls `nvidia-smi dmon` to update GPU metrics in real-time.
+    This worker streams output from nvidia-smi dmon command and parses
+    GPU metrics (power, temperature, utilization, memory) to update plots.
+    The subprocess runs continuously until the worker is cancelled.
+    Stdout and stderr are consumed concurrently to prevent blocking.
+    Args:
+        gpu_id: GPU device ID to monitor
+        log: RichLog widget for logging output and errors
+        mem_plot: Plot widget for GPU memory usage
+        power_plot: Plot widget for GPU power consumption
+        temp_plot: Plot widget for GPU temperature
+        util_plot: Plot widget for GPU utilization
+    """
     command: list[str] = [*DMON_BASE_CMD, str(gpu_id)]
 
     async with subprocess_lifespan(command, log=log, name="nvidia-dmon") as proc:
@@ -86,6 +157,9 @@ async def poll_dmon_stats(
             return
 
         async def consume_stdout(stdout: asyncio.StreamReader, /) -> None:
+            parse_error_count = 0
+            max_parse_errors = 20
+
             while not stdout.at_eof():
                 line: bytes = await stdout.readline()
                 if not line:
@@ -96,12 +170,24 @@ async def poll_dmon_stats(
                 log.write(content=decoded)
                 parts: list[str] = re.split(pattern=r"\s+", string=decoded)
                 try:
-                    p, u, m = float(parts[1]), int(parts[4]), int(parts[5])
-                    power_plot.update_data(p)
-                    util_plot.update_data(u)
-                    mem_plot.update_data(m)
-                except (IndexError, ValueError):
-                    pass
+                    pwr, temp, util, mem = (
+                        float(parts[1]),
+                        int(parts[2]),
+                        int(parts[4]),
+                        int(parts[5]),
+                    )
+                    power_plot.update_data(pwr)
+                    util_plot.update_data(util)
+                    temp_plot.update_data(temp)
+                    mem_plot.update_data(mem)
+                    parse_error_count = 0  # Reset on success
+                except (IndexError, ValueError) as e:
+                    parse_error_count += 1
+                    if parse_error_count >= max_parse_errors:
+                        log.write(
+                            content=f"[bold red]Too many parse errors in dmon "
+                            f"output: {e}[/bold red]"
+                        )
 
         async def consume_stderr(stderr: asyncio.StreamReader, /) -> None:
             while not stderr.at_eof():
@@ -143,20 +229,21 @@ async def update_info_panel(
 
 
 async def update_process_list(log: RichLog, proc_table: DataTable) -> None:
-    """Queries for running processes and updates the table."""
+    """Queries for running processes and updates the table.
 
-    async with subprocess_lifespan(
-        PROCESS_QUERY_CMD, log=log, name="process-list"
-    ) as proc:
-        stdout, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            log.write(
-                "[red]Proc Query Failed:[/] "
-                f"{stderr.decode(encoding='utf-8', errors='ignore')}"
-            )
-            return
+    This function is called periodically to refresh the GPU process list.
+    It queries nvidia-smi for compute applications using the GPU and
+    updates the process table widget.
+
+    Args:
+        log: RichLog widget for logging errors
+        proc_table: DataTable widget to display process information
+    """
+    try:
+        output: str | None = await subprocess_communicate(
+            PROCESS_QUERY_CMD, log=log, name="process-list"
+        )
         proc_table.clear()
-        output: str = stdout.decode(encoding="utf-8").strip()
         if not output or "[Not Supported]" in output:
             proc_table.add_row("[i]No running processes[/i]")
         else:
@@ -168,6 +255,8 @@ async def update_process_list(log: RichLog, proc_table: DataTable) -> None:
                     )
                 except ValueError:
                     log.write(f"[orange]WARN: Malformed process line:[/] {line}")
+    except Exception as e:
+        log.write(f"[red]Process list update failed:[/red] {e}")
 
 
 def _get_cpu_os_info() -> str:
