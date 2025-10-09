@@ -5,6 +5,7 @@ from typing import ClassVar
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Grid, Horizontal
+from textual.reactive import Reactive, var
 from textual.widgets import DataTable, Footer, Header, RichLog, Static
 
 from ._defaults import DEFAULT_PROC_POLL
@@ -45,9 +46,6 @@ class SystemMonitor(App):
         text-align: center;
         text-style: bold;
     }
-    #raw-log {
-        height: 7;
-    }
 
     #bottom-row {
         height: 20%;
@@ -66,6 +64,7 @@ class SystemMonitor(App):
     DataTable > .datatable--odd-row { background: $surface; }
     DataTable > .datatable--even-row { background: $surface-darken-1; }
     """
+
     gpu_id: int
     info_panel: Static
     process_table: DataTable
@@ -136,6 +135,7 @@ class SystemMonitor(App):
         yield Footer()
 
     def on_mount(self) -> None:
+        self.theme = "gruvbox"
         self.process_table.add_columns(*PROCESS_TABLE_COLUMNS)
         self._update_plot_grid_layout()
 

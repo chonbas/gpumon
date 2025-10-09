@@ -18,7 +18,7 @@ PROCESS_QUERY_CMD: list[str] = [
     "--format=csv,noheader,nounits",
 ]
 
-PROCESS_TABLE_COLUMNS: list[str] = ["PID", "Name", "Memory", "VRAM (MiB)"]
+PROCESS_TABLE_COLUMNS: list[str] = ["PID", "Name", "Memory"]
 
 
 class SysMonitorWorkerError(Exception):
