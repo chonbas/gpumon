@@ -5,7 +5,6 @@ from typing import ClassVar
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Grid, Horizontal
-from textual.reactive import Reactive, var
 from textual.widgets import DataTable, Footer, Header, RichLog, Static
 
 from ._defaults import DEFAULT_PROC_POLL
