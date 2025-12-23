@@ -1,6 +1,7 @@
 from collections import deque
 from collections.abc import Callable
 from datetime import datetime
+from functools import partial
 
 import pytz
 from textual_plotext import PlotextPlot
@@ -13,9 +14,11 @@ ValueFormatter = Callable[[float], str]
 def memory_formatter(total_bytes: float, normed: bool = False) -> ValueFormatter:
     """Formats a memory usage percentage and total bytes into a readable string."""
 
-    def formatter(percent: float, /) -> str:
-        normed_percent: float = percent if normed else percent / 100.0
-        unnormed_percent: float = percent if not normed else percent * 100.0
+    def formatter(
+        percent: float, /, total_bytes: float, is_normalized: bool = False
+    ) -> str:
+        normed_percent: float = percent if is_normalized else percent / 100.0
+        unnormed_percent: float = percent if not is_normalized else percent * 100.0
         tot_bytes: float = total_bytes * normed_percent
         val: str = f"{unnormed_percent: .1f}% /"
         if tot_bytes >= 1e9:
@@ -28,7 +31,7 @@ def memory_formatter(total_bytes: float, normed: bool = False) -> ValueFormatter
             val += f"{tot_bytes: .2f} B"
         return val
 
-    return formatter
+    return partial(formatter, is_normalized=normed, total_bytes=total_bytes)
 
 
 def percent_formatter(normed: bool = True) -> ValueFormatter:

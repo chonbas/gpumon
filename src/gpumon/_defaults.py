@@ -1,6 +1,6 @@
 import os
 
-DEFAULT_HISTORY = 1000
+DEFAULT_HISTORY = 100
 LOCAL_TIMEZONE: str = os.getenv("LOCAL_TIMEZONE", default="US/Arizona")
 
 DEFAULT_DMON_POLL = 1

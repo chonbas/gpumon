@@ -75,12 +75,6 @@ class SystemMonitor(App):
         self.gpu_id = gpu_id
         self.info_panel = Static(content="Querying system info...", id="info-panel")
 
-        gpu_utilization = DataPlot(
-            name=f"GPU-{self.gpu_id} Utilization (%)",
-            id="gpu-util-plot",
-            y_upper_lim=100,
-            value_formatter=percent_formatter(),
-        )
         gpu_memory = DataPlot(
             name=f"GPU-{self.gpu_id} Memory (%)",
             id="gpu-mem-plot",
@@ -96,6 +90,12 @@ class SystemMonitor(App):
             id="gpu-temp-plot",
             value_formatter=unit_formatter(unit="°C"),
         )
+        gpu_utilization = DataPlot(
+            name=f"GPU-{self.gpu_id} Utilization (%)",
+            id="gpu-util-plot",
+            y_upper_lim=100,
+            value_formatter=percent_formatter(),
+        )
         cpu_usage = DataPlot(
             name="CPU Usage (%)",
             id="cpu-plot",
@@ -109,10 +109,10 @@ class SystemMonitor(App):
         )
 
         self.plots = [
-            gpu_utilization,
             gpu_memory,
             gpu_power,
             gpu_temperature,
+            gpu_utilization,
             cpu_usage,
             sys_memory,
         ]
@@ -139,10 +139,10 @@ class SystemMonitor(App):
         self._update_plot_grid_layout()
 
         (
-            gpu_utilization,
             gpu_memory,
             gpu_power,
             gpu_temperature,
+            gpu_utilization,
             cpu_usage,
             sys_memory,
         ) = self.plots
