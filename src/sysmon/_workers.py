@@ -1,15 +1,13 @@
 import asyncio
 import os
 import re
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
 
 import psutil
 from textual.widgets import DataTable, RichLog, Static
 
-from sysmon._defaults import DEFAULT_DMON_POLL, GIB, MIB
 from sysmon._plot import DataPlot, memory_formatter
-from sysmon._types import ProcessFilter, ProcessInfo
+from sysmon._types import DEFAULT_DMON_POLL, GIB, MIB, ProcessFilter, ProcessInfo
+from sysmon._utils import subprocess_communicate, subprocess_lifespan
 
 DMON_BASE_CMD: list[str] = ["nvidia-smi", "dmon", "-d", str(DEFAULT_DMON_POLL)]
 INFO_BASE_CMD: list[str] = ["nvidia-smi", "-q", "-i"]
@@ -29,54 +27,48 @@ PROCESS_TABLE_COLUMNS: list[str] = [
 ]
 
 
-@asynccontextmanager
-async def subprocess_lifespan(
-    command: list[str],
-    /,
-    log: RichLog,
-    name: str = "Subprocess",
-) -> AsyncGenerator[asyncio.subprocess.Process, None]:
-    """A context manager to ensure a subprocess is always terminated.
-    Args:
-        command: The command to execute as a list of strings
-        log: RichLog widget for logging errors
-        name: Name of the subprocess for logging
-    """
-    process: asyncio.subprocess.Process = await asyncio.create_subprocess_exec(
-        *command,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
+def get_cpu_os_info() -> str:
+    os_info = os.uname()
+    cpu_cores: int | None = psutil.cpu_count(logical=False)
+    logical_cpus: int | None = psutil.cpu_count(logical=True)
+    arch: str = os_info.machine
+    total_ram: float = psutil.virtual_memory().total / GIB
+    node: str = os_info.nodename
+    sysname: str = os_info.sysname
+    release: str = os_info.release
+    return (
+        f"{node}\n{sysname} | {release} | {arch}\n"
+        f"CPU Cores: {cpu_cores or 'N/A'} | "
+        f"Logical CPUs: {logical_cpus or 'N/A'} | "
+        f"Total RAM: {total_ram: .2f} GiB"
     )
-    try:
-        yield process
-    except Exception as e:
-        log.write(content=f"[red]{name} error:[/red] {e}")
-        raise RuntimeError(f"Error in {name} - {e}") from e
-    finally:
-        if process.returncode is None:
-            process.kill()
-            await process.wait()
 
 
-async def subprocess_communicate(
-    command: list[str],
-    /,
+async def update_info_panel(
+    gpu_id: int,
+    info_panel: Static,
     log: RichLog,
-    name: str = "Subprocess",
-    timeout: float = 5.0,
-) -> str | None:
-    async with subprocess_lifespan(command, log=log, name=name) as proc:
-        try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        except asyncio.TimeoutError:
-            log.write("[orange]Process query timed out[/orange]")
-            return
-    if proc.returncode != 0:
-        log.write(
-            f"[red]{name} failed:[/] {stderr.decode(encoding='utf-8', errors='ignore')}"
+    mem_plot: DataPlot,
+    power_plot: DataPlot,
+) -> None:
+    """Query nvidia-smi for static GPU info to set info panel."""
+    command: list[str] = [*INFO_BASE_CMD, str(gpu_id)]
+    sys_info: str = get_cpu_os_info()
+    info_panel.update(content=f"{sys_info}\nQuerying GPU info...")
+
+    async with subprocess_lifespan(command, log=log, name="info-panel") as proc:
+        stdout, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            raise RuntimeError(stderr.decode(encoding="utf-8", errors="ignore"))
+
+        output: str = stdout.decode()
+        nv_info: str = _get_gpu_info(
+            output=output,
+            mem_plot=mem_plot,
+            power_plot=power_plot,
+            gpu_id=gpu_id,
         )
-        return
-    return stdout.decode(encoding="utf-8").strip()
+        info_panel.update(content=f"{sys_info}\n{nv_info}")
 
 
 async def poll_cpu_percent(
@@ -91,7 +83,9 @@ async def poll_cpu_percent(
     retries = 0
     while True:
         try:
-            cpu_percent: float = psutil.cpu_percent(interval=None)
+            cpu_percent: float = await asyncio.to_thread(
+                psutil.cpu_percent, interval=None
+            )
             cpu_plot.update_data({"CPU": cpu_percent})
         except Exception as e:
             retries += 1
@@ -115,7 +109,7 @@ async def poll_cpu_temp(
     retries = 0
     while True:
         try:
-            temps = psutil.sensors_temperatures()
+            temps = await asyncio.to_thread(psutil.sensors_temperatures)
             data: dict[str, float] = {}
             thresholds: dict[str, tuple[float | None, float | None]] = {}
 
@@ -154,7 +148,7 @@ async def poll_system_memory(
 
     while True:
         try:
-            mem = psutil.virtual_memory()
+            mem = await asyncio.to_thread(psutil.virtual_memory)
             if not mem_plot.formatter_is_set(series="System"):
                 mem_plot.set_value_formatter(
                     memory_formatter(total_bytes=mem.total, from_percent=True),
@@ -246,33 +240,6 @@ async def poll_dmon_stats(
         await asyncio.gather(consume_stdout(proc.stdout), consume_stderr(proc.stderr))
 
 
-async def update_info_panel(
-    gpu_id: int,
-    info_panel: Static,
-    log: RichLog,
-    mem_plot: DataPlot,
-    power_plot: DataPlot,
-) -> None:
-    """Query nvidia-smi for static GPU info to set info panel."""
-    command: list[str] = [*INFO_BASE_CMD, str(gpu_id)]
-    sys_info: str = _get_cpu_os_info()
-    info_panel.update(content=f"{sys_info}\nQuerying GPU info...")
-
-    async with subprocess_lifespan(command, log=log, name="info-panel") as proc:
-        stdout, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            raise RuntimeError(stderr.decode(encoding="utf-8", errors="ignore"))
-
-        output: str = stdout.decode()
-        nv_info: str = _get_gpu_info(
-            output=output,
-            mem_plot=mem_plot,
-            power_plot=power_plot,
-            gpu_id=gpu_id,
-        )
-        info_panel.update(content=f"{sys_info}\n{nv_info}")
-
-
 async def update_process_list(
     log: RichLog,
     proc_table: DataTable,
@@ -296,7 +263,9 @@ async def update_process_list(
     gpu_procs: dict[int, str] = {}
     try:
         output: str | None = await subprocess_communicate(
-            PROCESS_QUERY_CMD, log=log, name="process-list"
+            PROCESS_QUERY_CMD,
+            log=log,
+            name="process-list",
         )
         if output and "[Not Supported]" not in output:
             for line in output.splitlines():
@@ -366,23 +335,6 @@ async def update_process_list(
                 f"{p.gpu_mem} MB" if p.gpu_mem != "N/A" else "-",
                 key=str(p.pid),
             )
-
-
-def _get_cpu_os_info() -> str:
-    os_info = os.uname()
-    cpu_cores: int | None = psutil.cpu_count(logical=False)
-    logical_cpus: int | None = psutil.cpu_count(logical=True)
-    arch: str = os_info.machine
-    total_ram: float = psutil.virtual_memory().total / GIB
-    node: str = os_info.nodename
-    sysname: str = os_info.sysname
-    release: str = os_info.release
-    return (
-        f"{node}\n{sysname} | {release} | {arch}\n"
-        f"CPU Cores: {cpu_cores or 'N/A'} | "
-        f"Logical CPUs: {logical_cpus or 'N/A'} | "
-        f"Total RAM: {total_ram: .2f} GiB"
-    )
 
 
 def _get_gpu_info(

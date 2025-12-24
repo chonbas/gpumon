@@ -1,25 +1,21 @@
 from collections import deque
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
 import pytz
 from textual_plotext import PlotextPlot
 
-from sysmon._defaults import DEFAULT_HISTORY, GIB, KIB, LOCAL_TIMEZONE, MIB
-from sysmon._types import TemperatureStatus
-
-ValueFormatter = Callable[[float], str]
-
-# Standard color palette for series
-SERIES_COLORS: list[str] = ["cyan", "magenta", "yellow", "green", "blue", "white"]
-
-# Temperature status colors
-TEMP_STATUS_COLORS: dict[TemperatureStatus, str] = {
-    TemperatureStatus.NORMAL: "green",
-    TemperatureStatus.WARNING: "orange",
-    TemperatureStatus.CRITICAL: "red",
-}
+from sysmon._types import (
+    DEFAULT_HISTORY,
+    GIB,
+    KIB,
+    LOCAL_TIMEZONE,
+    MIB,
+    SERIES_COLORS,
+    TEMP_STATUS_COLORS,
+    TemperatureStatus,
+    ValueFormatter,
+)
 
 
 @dataclass

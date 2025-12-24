@@ -1,5 +1,3 @@
-"""Custom Textual widgets for sysmon."""
-
 from __future__ import annotations
 
 from typing import ClassVar
@@ -12,7 +10,7 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import Button, Input, Select
 
-from sysmon._types import ProcessFilter, SortColumn
+from sysmon._types import ProcessFilter, SortColumn, enum_from_value
 
 
 class ProcessFilterInput(Widget):
@@ -111,7 +109,7 @@ class ProcessFilterInput(Widget):
         if event.value is not None and event.value != Select.BLANK:
             self.process_filter = ProcessFilter(
                 query=self.process_filter.query,
-                sort_by=event.value,
+                sort_by=enum_from_value(SortColumn, event.value),
                 ascending=self.process_filter.ascending,
             )
             self.post_message(self.FilterChanged(self.process_filter))

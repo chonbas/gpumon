@@ -1,12 +1,12 @@
 import argparse
 
-from sysmon._defaults import (
+from sysmon._monitor import SystemMonitor
+from sysmon._types import (
     DEFAULT_DMON_POLL,
     DEFAULT_HISTORY,
     DEFAULT_PROC_POLL,
     LOCAL_TIMEZONE,
 )
-from sysmon._monitor import SystemMonitor
 
 
 def main() -> None:
