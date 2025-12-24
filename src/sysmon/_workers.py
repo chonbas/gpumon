@@ -348,19 +348,15 @@ async def update_process_list(
         key=process_filter.sort_key,
         reverse=not process_filter.ascending,
     )
-
-    # Take top 50
-    top_procs = sorted_procs[:50]
-
     # Update Table
     proc_table.clear()
-    if not top_procs:
+    if not sorted_procs:
         if process_filter.query:
             proc_table.add_row("[i]No matching processes[/i]")
         else:
             proc_table.add_row("[i]No running processes[/i]")
     else:
-        for p in top_procs:
+        for p in sorted_procs:
             proc_table.add_row(
                 str(p.pid),
                 p.name,
