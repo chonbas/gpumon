@@ -6,7 +6,7 @@ from functools import partial
 import pytz
 from textual_plotext import PlotextPlot
 
-from ._defaults import DEFAULT_HISTORY, LOCAL_TIMEZONE
+from sysmon._defaults import DEFAULT_HISTORY, LOCAL_TIMEZONE
 
 ValueFormatter = Callable[[float], str]
 

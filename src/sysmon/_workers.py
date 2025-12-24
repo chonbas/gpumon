@@ -7,8 +7,8 @@ from contextlib import asynccontextmanager
 import psutil
 from textual.widgets import DataTable, RichLog, Static
 
-from ._defaults import DEFAULT_DMON_POLL
-from ._plot import DataPlot, memory_formatter
+from sysmon._defaults import DEFAULT_DMON_POLL
+from sysmon._plot import DataPlot, memory_formatter
 
 DMON_BASE_CMD: list[str] = ["nvidia-smi", "dmon", "-d", str(DEFAULT_DMON_POLL), "-i"]
 INFO_BASE_CMD: list[str] = ["nvidia-smi", "-q", "-i"]
@@ -20,9 +20,6 @@ PROCESS_QUERY_CMD: list[str] = [
 
 PROCESS_TABLE_COLUMNS: list[str] = ["PID", "Name", "Memory"]
 
-
-class SysMonitorWorkerError(Exception):
-    """Custom exception for SystemMonitor worker errors."""
 
 
 @asynccontextmanager
@@ -47,7 +44,7 @@ async def subprocess_lifespan(
         yield process
     except Exception as e:
         log.write(content=f"[red]{name} error:[/red] {e}")
-        raise SysMonitorWorkerError(f"Error in {name} - {e}") from e
+        raise RuntimeError(f"Error in {name} - {e}") from e
     finally:
         if process.returncode is None:
             process.kill()
@@ -94,7 +91,7 @@ async def poll_cpu_percent(
                     content="[bold red]CPU polling failed too many times, "
                     "stopping.[/bold red]"
                 )
-                raise SysMonitorWorkerError("CPU polling failed too many times") from e
+                raise RuntimeError("CPU polling failed too many times") from e
             log.write(content=f"[red]CPU Polling error:[/red] {e}")
         await asyncio.sleep(delay=DEFAULT_DMON_POLL)
 

@@ -3,33 +3,6 @@ revision = 3
 requires-python = ">=3.12"
 
 [[package]]
-name = "gpumon"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "psutil" },
-    { name = "pytz" },
-    { name = "textual" },
-    { name = "textual-plotext" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "psutil", specifier = ">=7.1.0" },
-    { name = "pytz", specifier = ">=2025.2" },
-    { name = "textual", specifier = ">=6.2.1" },
-    { name = "textual-plotext", specifier = ">=1.0.1" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "ruff", specifier = ">=0.13.3" }]
-
-[[package]]
 name = "linkify-it-py"
 version = "2.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -172,6 +145,33 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/cf/49/12f5955818a1139eed288753479ba9d996f6ea0b101784bb1fe6977ec128/ruff-0.13.3-py3-none-win_amd64.whl", hash = "sha256:621e2e5812b691d4f244638d693e640f188bacbb9bc793ddd46837cea0503dd2", size = 13455262, upload-time = "2025-10-02T19:29:26.882Z" },
     { url = "https://files.pythonhosted.org/packages/fe/72/7b83242b26627a00e3af70d0394d68f8f02750d642567af12983031777fc/ruff-0.13.3-py3-none-win_arm64.whl", hash = "sha256:9e9e9d699841eaf4c2c798fa783df2fabc680b72059a02ca0ed81c460bc58330", size = 12538484, upload-time = "2025-10-02T19:29:28.951Z" },
 ]
+
+[[package]]
+name = "sysmon"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "psutil" },
+    { name = "pytz" },
+    { name = "textual" },
+    { name = "textual-plotext" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "psutil", specifier = ">=7.1.0" },
+    { name = "pytz", specifier = ">=2025.2" },
+    { name = "textual", specifier = ">=6.2.1" },
+    { name = "textual-plotext", specifier = ">=1.0.1" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "ruff", specifier = ">=0.13.3" }]
 
 [[package]]
 name = "textual"

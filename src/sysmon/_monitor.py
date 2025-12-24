@@ -7,9 +7,9 @@ from textual.binding import Binding, BindingType
 from textual.containers import Grid, Horizontal
 from textual.widgets import DataTable, Footer, Header, RichLog, Static
 
-from ._defaults import DEFAULT_PROC_POLL
-from ._plot import DataPlot, percent_formatter, unit_formatter
-from ._workers import (
+from sysmon._defaults import DEFAULT_PROC_POLL
+from sysmon._plot import DataPlot, percent_formatter, unit_formatter
+from sysmon._workers import (
     PROCESS_TABLE_COLUMNS,
     poll_cpu_percent,
     poll_dmon_stats,

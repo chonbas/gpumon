@@ -1,6 +1,6 @@
 [project]
 author = "Alexei Bastidas"
-name = "gpumon"
+name = "sysmon"
 version = "0.1.0"
 description = "Simple Textual application to provide live monitoring of an nVidia GPU."
 readme = "README.md"
@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-gpumon = "gpumon:main"
+sysmon = "sysmon:main"
 
 [tool.ruff]
 line-length = 88
