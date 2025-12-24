@@ -5,3 +5,6 @@ LOCAL_TIMEZONE: str = os.getenv("LOCAL_TIMEZONE", default="US/Arizona")
 
 DEFAULT_DMON_POLL = 1
 DEFAULT_PROC_POLL = 3
+GIB = 1024**3
+MIB = 1024**2
+KIB = 1024
