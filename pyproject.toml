@@ -2,7 +2,7 @@
 author = "Alexei Bastidas"
 name = "sysmon"
 version = "0.1.0"
-description = "Simple Textual application to provide live monitoring of an nVidia GPU."
+description = "Live monitoring of CPU and GPU memory/power/process and temperature usage."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-sysmon = "sysmon:main"
+sysmon = "sysmon.app:main"
 
 [tool.ruff]
 line-length = 88

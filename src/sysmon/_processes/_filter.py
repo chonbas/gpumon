@@ -10,7 +10,9 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import Button, Input, Select
 
-from sysmon._types import ProcessFilter, SortColumn, enum_from_value
+from sysmon._utils import enum_from_value
+
+from ._types import ProcessFilter, SortColumn
 
 
 class ProcessFilterInput(Widget):

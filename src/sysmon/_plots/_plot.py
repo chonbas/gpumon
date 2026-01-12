@@ -1,126 +1,13 @@
 from collections import deque
-from dataclasses import dataclass, field
 from datetime import datetime
 
 import pytz
 from textual_plotext import PlotextPlot
 
-from sysmon._types import (
-    DEFAULT_HISTORY,
-    GIB,
-    KIB,
-    LOCAL_TIMEZONE,
-    MIB,
-    SERIES_COLORS,
-    TEMP_STATUS_COLORS,
-    TemperatureStatus,
-    ValueFormatter,
-)
+from sysmon._utils import LOCAL_TIMEZONE, PLOT_HISTORY_SIZE
 
-
-@dataclass
-class SeriesStyle:
-    """Style configuration for a data series.
-
-    Attributes:
-        color: Base color for this series
-        status_color: Optional override color based on status (e.g., temperature)
-    """
-
-    color: str = "cyan"
-    status_color: str | None = None
-
-    @property
-    def active_color(self) -> str:
-        """Return the color to use for rendering."""
-        return self.status_color if self.status_color else self.color
-
-
-@dataclass
-class SeriesData:
-    """Data and styling for a single series in a plot.
-
-    Attributes:
-        values: Deque of (timestamp, value) tuples
-        style: Rendering style for this series
-        high_threshold: Optional high threshold for warning status
-        critical_threshold: Optional critical threshold for alert status
-    """
-
-    values: deque[tuple[datetime, float]] = field(
-        default_factory=lambda: deque(maxlen=DEFAULT_HISTORY)
-    )
-    style: SeriesStyle = field(default_factory=SeriesStyle)
-    high_threshold: float | None = None
-    critical_threshold: float | None = None
-
-    def get_status(self) -> TemperatureStatus:
-        """Get current status based on last value and thresholds."""
-        if not self.values:
-            return TemperatureStatus.NORMAL
-        current = self.values[-1][1]
-        if self.critical_threshold is not None and current >= self.critical_threshold:
-            return TemperatureStatus.CRITICAL
-        if self.high_threshold is not None and current >= self.high_threshold:
-            return TemperatureStatus.WARNING
-        return TemperatureStatus.NORMAL
-
-    def update_status_color(self) -> None:
-        """Update the status color based on current value and thresholds.
-
-        Only sets status_color for WARNING or CRITICAL states.
-        NORMAL state keeps status_color as None so base color is used.
-        """
-        status = self.get_status()
-        if status == TemperatureStatus.NORMAL:
-            # Use base color for normal temps to distinguish series
-            self.style.status_color = None
-        else:
-            self.style.status_color = TEMP_STATUS_COLORS.get(status)
-
-
-def memory_formatter(total_bytes: float, from_percent: bool = False) -> ValueFormatter:
-    """Formats a memory usage percentage and total bytes into a readable string."""
-
-    def formatter(value: float, /) -> str:
-        percent_value: float = value if from_percent else value / total_bytes * 100.0
-        bytes_value: float = (
-            value if not from_percent else total_bytes * (percent_value / 100.0)
-        )
-
-        val: str = f"{percent_value: .1f}% ("
-        if bytes_value >= GIB:
-            val += f"{bytes_value / GIB:.1f}GB"
-        elif bytes_value >= MIB:
-            val += f"{bytes_value / MIB:.1f}MB"
-        elif bytes_value >= KIB:
-            val += f"{bytes_value / KIB:.1f}KB"
-        else:
-            val += f"{bytes_value:.1f}B"
-        val += f"/{total_bytes / GIB:.1f}GB)"
-        return val.strip()
-
-    return formatter
-
-
-def percent_formatter(normed: bool = True) -> ValueFormatter:
-    """Formats a float value as a percentage string with one decimal place."""
-
-    def formatter(percent: float, /) -> str:
-        if not normed:
-            percent = percent / 100.0
-        return f"{percent:.1f}%"
-
-    return formatter
-
-
-def unit_formatter(unit: str) -> ValueFormatter:
-    """Formats a float value with one decimal place."""
-
-    def formatter(value: float, /) -> str:
-        return f"{value:.1f}{unit}"
-
-    return formatter
+from ._series import SeriesData, SeriesStyle
+from ._types import ValueFormatter, get_default_color
 
 
 class DataPlot(PlotextPlot):
@@ -140,21 +27,22 @@ class DataPlot(PlotextPlot):
         use_temperature_colors: Whether to apply temperature-based coloring
     """
 
+    border_title: str
+    history_size: int
     marker: str = "braille"
     series: dict[str, SeriesData]
-    tz: pytz.BaseTzInfo
-    y_upper_lim: float | None
-    value_formatter: ValueFormatter | None
     series_formatters: dict[str, ValueFormatter]
-    history_size: int
+    tz: pytz.BaseTzInfo
     use_temperature_colors: bool
+    value_formatter: ValueFormatter | None
+    y_upper_lim: float | None
 
     def __init__(
         self,
         name: str | None = None,
         id: str | None = None,
         tz: str = LOCAL_TIMEZONE,
-        history_size: int = DEFAULT_HISTORY,
+        history_size: int = PLOT_HISTORY_SIZE,
         value_formatter: ValueFormatter | None = None,
         y_upper_lim: float | None = None,
         use_temperature_colors: bool = False,
@@ -229,15 +117,17 @@ class DataPlot(PlotextPlot):
         if isinstance(value, (int, float)):
             value = {"default": float(value)}
 
-        color_idx = len(self.series)
+        color_idx = 0
         for series_name, val in value.items():
             if series_name not in self.series:
-                color = SERIES_COLORS[color_idx % len(SERIES_COLORS)]
+                color, color_offset = get_default_color(
+                    index=color_idx, name=series_name
+                )
                 self.series[series_name] = SeriesData(
                     values=deque(maxlen=self.history_size),
                     style=SeriesStyle(color=color),
                 )
-                color_idx += 1
+                color_idx += color_offset
 
             series = self.series[series_name]
             series.values.append((now, val))

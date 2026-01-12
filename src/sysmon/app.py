@@ -2,25 +2,23 @@ from functools import partial
 from math import ceil
 from typing import ClassVar
 
-import psutil
-from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
-from textual.containers import Grid, Vertical
-from textual.widgets import DataTable, Footer, Header, RichLog, Static
+from textual.containers import Grid
+from textual.widgets import Footer, Header, RichLog, Static
 
-from sysmon._plot import DataPlot, percent_formatter, unit_formatter
-from sysmon._types import DEFAULT_PROC_POLL, ProcessFilter
-from sysmon._widgets import ProcessFilterInput
-from sysmon._workers import (
-    PROCESS_TABLE_COLUMNS,
+from sysmon._info_panel import update_info_panel
+from sysmon._plots import (
+    DataPlot,
+    percent_formatter,
     poll_cpu_percent,
+    poll_cpu_sys_memory,
     poll_cpu_temp,
-    poll_dmon_stats,
-    poll_system_memory,
-    update_info_panel,
-    update_process_list,
+    poll_nvidia_dmon_info,
+    unit_formatter,
 )
+from sysmon._processes import ProcessTable
+from sysmon._utils import POLL_INTERVAL
 
 
 class SystemMonitor(App):
@@ -50,51 +48,32 @@ class SystemMonitor(App):
         color: $primary;
         border: round $primary;
         margin-bottom: 1;
-        text-align: center;
+        text-align: left;
         text-style: bold;
     }
-
-    #raw-log {
-        height: 10%;
-    }
-    #proc-container {
+    #process-table {
         height: 25%;
         width: 1fr;
     }
-    DataPlot, #proc-table, #raw-log {
+    #raw-log {
+        height: 10%;
+    }
+    DataPlot, #raw-log {
         border: round $primary;
     }
     DataPlot:disabled {
         opacity: 0.0;
     }
-    #proc-table {
-        background: $background;
-        height: 1fr;
-    }
-    DataTable > .datatable--header { background: $surface-darken-2; }
-    DataTable > .datatable--odd-row { background: $surface; }
-    DataTable > .datatable--even-row { background: $surface-darken-1; }
-    ProcessFilterInput {
-        dock: top;
-        height: 3;
-        border-bottom: solid $primary;
-    }
-    """
 
-    gpu_id: int
+    """
     info_panel: Static
-    process_table: DataTable
     raw_log: RichLog
     plots: list[DataPlot]
-    process_filter: ProcessFilter
-    filter_widget: ProcessFilterInput
+    process_table: ProcessTable
 
-    def __init__(self, gpu_id: int = 0) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self.gpu_id = gpu_id
         self.info_panel = Static(content="Querying system info...", id="info-panel")
-        self.process_filter = ProcessFilter()
-
         # Unified Memory plot (System RAM + GPU VRAM)
         unified_memory = DataPlot(
             name="Memory Usage (%)",
@@ -134,9 +113,7 @@ class SystemMonitor(App):
             gpu_power,
         ]
 
-        self.process_table = DataTable(id="proc-table", cursor_type="row")
-        self.process_table.border_title = "Processes"
-        self.filter_widget = ProcessFilterInput(id="process-filter")
+        self.process_table = ProcessTable(id="process-table")
         self.raw_log = RichLog(max_lines=10, id="raw-log", highlight=True, markup=True)
         self.raw_log.border_title = "Log (L to Toggle)"
         self.raw_log.display = False
@@ -147,15 +124,12 @@ class SystemMonitor(App):
         with Grid(id="gpu-grid"):
             for plot in self.plots:
                 yield plot
-        with Vertical(id="proc-container"):
-            yield self.filter_widget
-            yield self.process_table
+        yield self.process_table
         yield self.raw_log
         yield Footer()
 
     def on_mount(self) -> None:
         self.theme = "gruvbox"
-        self.process_table.add_columns(*PROCESS_TABLE_COLUMNS)
         self._update_plot_grid_layout()
 
         unified_memory, unified_utilization, unified_temperature, gpu_power = self.plots
@@ -164,7 +138,6 @@ class SystemMonitor(App):
         self.run_worker(
             work=partial(
                 update_info_panel,
-                self.gpu_id,
                 self.info_panel,
                 self.raw_log,
                 unified_memory,
@@ -190,7 +163,7 @@ class SystemMonitor(App):
 
         # System memory feeds into unified memory plot
         self.run_worker(
-            work=partial(poll_system_memory, self.raw_log, unified_memory),
+            work=partial(poll_cpu_sys_memory, self.raw_log, unified_memory),
             exclusive=True,
             group="memory_polling",
         )
@@ -198,7 +171,7 @@ class SystemMonitor(App):
         # GPU stats feed into unified plots
         self.run_worker(
             work=partial(
-                poll_dmon_stats,
+                poll_nvidia_dmon_info,
                 self.raw_log,
                 unified_memory,
                 gpu_power,
@@ -211,19 +184,19 @@ class SystemMonitor(App):
 
         self.set_interval(
             callback=self._refresh_process_list,
-            interval=DEFAULT_PROC_POLL,
+            interval=POLL_INTERVAL,
         )
 
-    async def _refresh_process_list(self) -> None:
-        """Wrapper to refresh process list with current filter state."""
-        await update_process_list(self.raw_log, self.process_table, self.process_filter)
+    ###################################################################################
+    # Keybind hooks
+    ###################################################################################
+    def action_focus_filter(self) -> None:
+        """Focus the process filter input."""
+        self.process_table.focus_filter()
 
-    @on(ProcessFilterInput.FilterChanged)
-    def on_filter_changed(self, event: ProcessFilterInput.FilterChanged) -> None:
-        """Handle process filter changes and immediately refresh the list."""
-        self.process_filter = event.filter
-        # Trigger immediate refresh with new filter
-        self.call_later(self._refresh_process_list)
+    def action_kill_process(self) -> None:
+        """Kills the selected process."""
+        self.process_table.kill_process(self.raw_log)
 
     def action_toggle_log(self) -> None:
         self.raw_log.display = not self.raw_log.display
@@ -235,22 +208,12 @@ class SystemMonitor(App):
             plot.display = not plot.display
             self._update_plot_grid_layout()
 
-    def action_focus_filter(self) -> None:
-        """Focus the process filter input."""
-        self.filter_widget.focus_filter()
-
-    def action_kill_process(self) -> None:
-        """Kills the selected process."""
-        try:
-            row_key = self.process_table.coordinate_to_cell_key(
-                self.process_table.cursor_coordinate
-            ).row_key
-            if row_key and row_key.value is not None:
-                pid = int(row_key.value)
-                psutil.Process(pid).kill()
-                self.raw_log.write(f"[green]Killed process {pid}[/green]")
-        except Exception as e:
-            self.raw_log.write(f"[red]Failed to kill process: {e}[/red]")
+    ###################################################################################
+    # Private Methods
+    ###################################################################################
+    async def _refresh_process_list(self) -> None:
+        """Wrapper to refresh process list with current filter state."""
+        await self.process_table.update_process_list(self.raw_log)
 
     def _update_plot_grid_layout(self) -> None:
         """Calculates and applies the optimal grid layout based on visible plots."""
@@ -272,3 +235,12 @@ class SystemMonitor(App):
 
         grid.styles.grid_size_columns = cols
         grid.styles.grid_size_rows = rows
+
+
+def main() -> None:
+    app = SystemMonitor()
+    app.run()
+
+
+if __name__ == "__main__":
+    main()
