@@ -194,9 +194,9 @@ class SystemMonitor(App):
         """Focus the process filter input."""
         self.process_table.focus_filter()
 
-    def action_kill_process(self) -> None:
+    async def action_kill_process(self) -> None:
         """Kills the selected process."""
-        self.process_table.kill_process(self.raw_log)
+        await self.process_table.kill_process(self.raw_log)
 
     def action_toggle_log(self) -> None:
         self.raw_log.display = not self.raw_log.display

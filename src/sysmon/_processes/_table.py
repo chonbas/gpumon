@@ -14,7 +14,7 @@ from ._filter import ProcessFilterInput
 from ._types import ProcessFilter, ProcessInfo
 from ._utils import get_processes, sort_and_filter_processes
 
-INTERACTION_TIMEOUT: float = 5.0
+INTERACTION_TIMEOUT: float = 10.0
 PROCESS_TABLE_COLUMNS: list[str] = [
     "PID",
     "Name",
@@ -125,7 +125,7 @@ class ProcessTable(Widget):
             self._table.remove_class("user-interacting")
             self._table.border_title = "Processes"
 
-    def kill_process(self, log: RichLog) -> None:
+    async def kill_process(self, log: RichLog) -> None:
         """Kills the selected process."""
         try:
             row_key = self._table.coordinate_to_cell_key(
@@ -135,6 +135,8 @@ class ProcessTable(Widget):
                 pid = int(row_key.value)
                 psutil.Process(pid).kill()
                 log.write(f"[green]Killed process {pid}[/green]")
+                self._user_interacting = False
+                await self.update_process_list(log)
         except Exception as e:
             log.write(f"[red]Failed to kill process: {e}[/red]")
 
